@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket MIDI Piano Roll</title>
+    <style>
+        body {
+            background: white;
+            color: #111;
+            font-family: sans-serif;
+            text-align: center;
+            user-select: none;
+        }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 20px;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        input[type="range"] {
+            writing-mode: bt-lr;
+            -webkit-appearance: slider-vertical;
+            width: 8px;
+            height: 150px;
+        }
+
+        #piano {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            height: 200px;
+            margin-top: 20px;
+            position: relative;
+        }
+
+        .key-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 40px;
+            position: relative;
+        }
+
+        .degree {
+            height: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #00aaff;
+            margin-bottom: 2px;
+        }
+
+        .degree.root {
+            color: #ffcc00;
+        }
+
+        .key {
+            width: 40px;
+            height: 160px;
+            margin: 0;
+            border: 2px solid #ddd;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            font-size: 12px;
+            box-sizing: border-box;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .white {
+            background: #fff;
+            color: #000;
+        }
+
+        .black {
+            background: #444;
+            color: #fff;
+        }
+
+        .key.active {
+            background: #00ccff !important;
+            color: #000 !important;
+        }
+
+        .octave-separator::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: -2px;
+            bottom: -20px;
+            width: 3px;
+            background: black;
+            z-index: 10;
+        }
+
+        button {
+            margin-bottom: 10px;
+            padding: 6px 12px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>🎹 WebSocket MIDI Piano Roll → Ableton</h2>
+
+    <button id="slideToggle">Slide Mode: OFF</button>
+    <button id="expressionToggle">Expression per Note: OFF</button>
+
+    <div id="controls">
+        <div class="slider-container">
+            <label for="cc1">Expression (CC11)</label>
+            <input type="range" id="cc1" min="0" max="127" value="64">
+        </div>
+        <div>
+            <label for="rootSelect">Key (Root)</label>
+            <select id="rootSelect">
+                <option>C</option>
+                <option>C#</option>
+                <option>D</option>
+                <option>D#</option>
+                <option>E</option>
+                <option>F</option>
+                <option>F#</option>
+                <option>G</option>
+                <option>G#</option>
+                <option>A</option>
+                <option>A#</option>
+                <option>B</option>
+            </select>
+            <br>
+            <label for="scaleSelect">Scale</label>
+            <select id="scaleSelect">
+                <option>major</option>
+                <option>minor</option>
+            </select>
+            <br>
+            <label for="octaveSelect">Octave</label>
+            <select id="octaveSelect">
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="piano"></div>
+
+    <script>
+        const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        const baseNote = 60, totalOctaves = 2;
+        let currentRoot = "C", currentScale = "major", currentOctave = 2;
+        let mouseDown = false, slideMode = false, activeSlideNote = null;
+        let expressionMode = false, lastKey = null, slideStartX = 0;
+
+        // --- WebSocket connection ---
+        const ws = new WebSocket("ws://YOUR_PC_IP:8765"); // replace with your PC IP
+        ws.onopen = () => console.log("Connected to WebSocket MIDI bridge");
+        ws.onclose = () => console.log("WebSocket closed");
+
+        function sendMIDI(status, data1, data2) {
+            if (ws.readyState === WebSocket.OPEN) ws.send(`${status},${data1},${data2}`);
+        }
+
+        // --- Build piano ---
+        function buildPiano() {
+            const piano = document.getElementById('piano');
+            piano.innerHTML = '';
+            for (let o = 0; o < totalOctaves; o++) {
+                for (let i = 0; i < 12; i++) {
+                    const noteName = noteNames[i] + (4 + o);
+                    const midiNote = baseNote + o * 12 + i;
+                    const container = document.createElement('div'); container.classList.add('key-container');
+                    if (i === 0 && o > 0) container.classList.add('octave-separator');
+                    const degreeLabel = document.createElement('div'); degreeLabel.classList.add('degree');
+                    container.appendChild(degreeLabel);
+                    const key = document.createElement('div'); key.classList.add('key');
+                    key.classList.add([1, 3, 6, 8, 10].includes(i) ? 'black' : 'white');
+                    key.dataset.note = midiNote; key.dataset.name = noteNames[i]; key.textContent = noteName;
+                    container.appendChild(key); piano.appendChild(container);
+                }
+            }
+        }
+
+        // --- Expression CC ---
+        ['cc1'].forEach(id => {
+            const slider = document.getElementById(id);
+            slider.addEventListener('input', () => sendMIDI(0xB0, 11, parseInt(slider.value)));
+        });
+
+        // --- Slide & expression toggles ---
+        document.getElementById('slideToggle').onclick = () => {
+            slideMode = !slideMode;
+            document.getElementById('slideToggle').textContent = 'Slide Mode: ' + (slideMode ? 'ON' : 'OFF');
+            document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
+            activeSlideNote = null; slideStartX = 0; lastKey = null;
+            sendMIDI(0xE0, 0, 64); // reset pitch bend
+        };
+        document.getElementById('expressionToggle').onclick = () => {
+            expressionMode = !expressionMode;
+            document.getElementById('expressionToggle').textContent = 'Expression per Note: ' + (expressionMode ? 'ON' : 'OFF');
+        };
+
+        // --- Root/Scale/Octave ---
+        document.getElementById('rootSelect').onchange = e => { currentRoot = e.target.value; updateScaleLabels(); };
+        document.getElementById('scaleSelect').onchange = e => { currentScale = e.target.value; updateScaleLabels(); };
+        document.getElementById('octaveSelect').onchange = e => { currentOctave = parseInt(e.target.value); };
+
+        // --- Note helpers ---
+        function getTransposedNote(n) {
+            const rootOffset = noteNames.indexOf(currentRoot);
+            const octaveOffset = (currentOctave - 2) * 12;
+            return n + rootOffset + octaveOffset;
+        }
+        function noteOn(keyEl) {
+            const midiNote = getTransposedNote(parseInt(keyEl.dataset.note));
+            let velocity = 100;
+            if (expressionMode) {
+                const rect = keyEl.getBoundingClientRect();
+                velocity = Math.round((rect.bottom - mouseY) / rect.height * 127);
+                velocity = Math.max(0, Math.min(127, velocity));
+                sendMIDI(0xB0, 11, velocity);
+            }
+            keyEl.classList.add('active');
+            sendMIDI(0x90, midiNote, 100);
+        }
+        function noteOff(keyEl) {
+            const midiNote = getTransposedNote(parseInt(keyEl.dataset.note));
+            keyEl.classList.remove('active');
+            sendMIDI(0x80, midiNote, 0);
+        }
+
+        // --- Expression ---
+        let mouseY = 0;
+        function updateExpression(keyEl, clientY) {
+            mouseY = clientY;
+            const rect = keyEl.getBoundingClientRect();
+            let val = Math.round((rect.bottom - clientY) / rect.height * 127);
+            val = Math.max(0, Math.min(127, val));
+            sendMIDI(0xB0, 11, val);
+        }
+
+        // --- Slide pitch ---
+        let lastBendTime = 0;
+        function updateSlidePitch(e) {
+            if (activeSlideNote === null) return;
+            const now = performance.now(); if (now - lastBendTime < 10) return; lastBendTime = now; // throttle 10ms
+            const distance = e.clientX - slideStartX;
+            const keys = Array.from(document.querySelectorAll('.key')).map(k => ({ el: k, note: parseInt(k.dataset.note), rect: k.getBoundingClientRect() }));
+            const startC = keys.find(k => k.note % 12 === 0);
+            const nextC = keys.find(k => k.note % 12 === 0 && k.note > startC.note);
+            if (!startC || !nextC) return;
+            const octaveWidth = nextC.rect.left - startC.rect.left;
+            const bend = Math.max(-8192, Math.min(8191, Math.round((distance / octaveWidth) * 8192)));
+            const val = bend + 8192;
+            sendMIDI(0xE0, val & 0x7F, (val >> 7) & 0x7F);
+        }
+
+        // --- Mouse handling ---
+        document.addEventListener('mousedown', e => {
+            if (!e.target.classList.contains('key')) return;
+            mouseDown = true;
+            if (slideMode) {
+                if (activeSlideNote !== null) return;
+                activeSlideNote = parseInt(e.target.dataset.note);
+                slideStartX = e.clientX;
+                e.target.classList.add('active');
+                sendMIDI(0x90, getTransposedNote(activeSlideNote), 100);
+            } else {
+                noteOn(e.target);
+                lastKey = e.target;
+            }
+        });
+        document.addEventListener('mousemove', e => {
+            if (!mouseDown) return;
+            if (slideMode && activeSlideNote !== null) {
+                updateSlidePitch(e);
+                if (expressionMode) updateExpression(document.querySelector('.key.active'), e.clientY);
+            } else if (!slideMode && e.target?.classList.contains('key') && e.target !== lastKey) {
+                if (lastKey) noteOff(lastKey);
+                noteOn(e.target);
+                lastKey = e.target;
+            } else if (!slideMode && lastKey && expressionMode) updateExpression(lastKey, e.clientY);
+        });
+        document.addEventListener('mouseup', e => {
+            mouseDown = false;
+            if (!slideMode && lastKey) noteOff(lastKey);
+            lastKey = null;
+            if (slideMode && activeSlideNote !== null) {
+                document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
+                sendMIDI(0x80, getTransposedNote(activeSlideNote), 0);
+                sendMIDI(0xE0, 0, 64);
+                activeSlideNote = null; slideStartX = 0;
+            }
+        });
+
+        // --- Scale labels ---
+        function updateScaleLabels() {
+            const rootIndex = noteNames.indexOf(currentRoot);
+            const intervals = currentScale === "major" ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+            const scaleNotes = intervals.map(i => (rootIndex + i) % 12);
+            const degreeMap = {}; scaleNotes.forEach((n, i) => degreeMap[n] = i + 1);
+            document.querySelectorAll('.key-container').forEach(container => {
+                const key = container.querySelector('.key'); const label = container.querySelector('.degree');
+                const noteIndex = noteNames.indexOf(key.dataset.name); label.textContent = ""; label.classList.remove('root');
+                if (noteIndex === rootIndex) { label.textContent = "1"; label.classList.add('root'); }
+                else if (degreeMap[noteIndex]) label.textContent = degreeMap[noteIndex];
+            });
+        }
+
+        buildPiano();
+        updateScaleLabels();
+    </script>
+</body>
+
+</html>
