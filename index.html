@@ -1,176 +1,481 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="UTF-8">
-<title>Web MIDI Piano Roll Low Latency</title>
-<style>
-body { background:white; color:#111; font-family:sans-serif; text-align:center; user-select:none; }
-#controls { display:flex; justify-content:center; align-items:flex-end; margin:20px; gap:40px; }
-.slider-container { display:flex; flex-direction:column; align-items:center; }
-.slider-container label { margin-bottom:10px; }
-input[type="range"] { writing-mode:bt-lr; -webkit-appearance:slider-vertical; width:8px; height:150px; margin:0 10px; }
-#piano { display:flex; justify-content:center; align-items:flex-end; height:200px; margin-top:20px; position:relative; }
-.key-container { display:flex; flex-direction:column; align-items:center; width:40px; position:relative; }
-.degree { height:20px; font-size:14px; font-weight:bold; color:#00aaff; margin-bottom:2px; }
-.degree.root { color:#ffcc00; }
-.key { width:40px; height:160px; margin:0; border:2px solid #ddd; cursor:pointer; display:flex; justify-content:center; align-items:flex-end; font-size:12px; box-sizing:border-box; position:relative; }
-.white { background:#fff; color:#000; }
-.black { background:#444; color:#fff; }
-.key.active { background:#00ccff !important; color:#000 !important; }
-.octave-separator::before { content:""; position:absolute; left:0; top:-2px; bottom:-20px; width:3px; background:black; z-index:10; }
-button { margin-bottom:10px; padding:6px 12px; font-size:16px; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-</style>
+    <meta charset="UTF-8">
+    <title>Web MIDI Piano Roll with Slide & Expression</title>
+    <style>
+        body {
+            background: white;
+            color: #111;
+            font-family: sans-serif;
+            text-align: center;
+            user-select: none;
+        }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            margin: 20px;
+            gap: 40px;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .slider-container label {
+            margin-bottom: 10px;
+        }
+
+        input[type="range"] {
+            writing-mode: bt-lr;
+            -webkit-appearance: slider-vertical;
+            width: 8px;
+            height: 150px;
+            margin: 0 10px;
+        }
+
+        #piano {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            height: 200px;
+            margin-top: 20px;
+            position: relative;
+        }
+
+        .key-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 40px;
+            position: relative;
+        }
+
+        .degree {
+            height: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #00aaff;
+            margin-bottom: 2px;
+        }
+
+        .degree.root {
+            color: #ffcc00;
+        }
+
+        .key {
+            width: 40px;
+            height: 160px;
+            margin: 0;
+            border: 2px solid #ddd;
+            border-radius: 0;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            font-size: 12px;
+            color: #000;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .white {
+            background: #fff;
+            color: #000;
+        }
+
+        .black {
+            background: #444;
+            color: #fff;
+        }
+
+        .key.active {
+            background: #00ccff !important;
+            color: #000 !important;
+        }
+
+        .octave-separator::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: -2px;
+            bottom: -20px;
+            width: 3px;
+            background: black;
+            z-index: 10;
+        }
+
+        button {
+            margin-bottom: 10px;
+            padding: 6px 12px;
+            font-size: 16px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+    </style>
 </head>
+
 <body>
-<h2>🎹 Web MIDI Piano Roll → Ableton</h2>
-<button id="slideToggle">Slide Mode: OFF</button>
-<button id="expressionToggle">Expression per Note: OFF</button>
-<div id="controls">
-  <div class="slider-container"><label for="cc1">Expression (CC11)</label><input type="range" id="cc1" min="0" max="127" value="64"></div>
-  <div class="slider-container"><label for="cc2">CC21</label><input type="range" id="cc2" min="0" max="127" value="64"></div>
-  <div class="slider-container"><label for="cc3">CC22</label><input type="range" id="cc3" min="0" max="127" value="64"></div>
-  <div class="slider-container"><label for="cc4">CC23</label><input type="range" id="cc4" min="0" max="127" value="64"></div>
-  <div>
-    <label for="rootSelect">Key (Root)</label>
-    <select id="rootSelect"><option>C</option><option>C#</option><option>D</option><option>D#</option><option>E</option><option>F</option><option>F#</option><option>G</option><option>G#</option><option>A</option><option>A#</option><option>B</option></select><br>
-    <label for="scaleSelect">Scale</label>
-    <select id="scaleSelect"><option>major</option><option>minor</option></select><br>
-    <label for="octaveSelect">Octave</label>
-    <select id="octaveSelect"><option value="0">0</option><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select><br>
-    <label for="midiOut">MIDI Out</label><select id="midiOut"></select>
-  </div>
-</div>
-<div id="piano"></div>
+    <h2>🎹 Web MIDI Piano Roll → Ableton</h2>
 
-<script>
-const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-const baseNote = 60, totalOctaves=2;
-let midiOutput=null, currentRoot="C", currentScale="major", currentOctave=2;
-let mouseDown=false, slideMode=false, activeSlideNote=null, expressionMode=false, lastKey=null, slideStartX=0;
+    <button id="slideToggle">Slide Mode: OFF</button>
+    <button id="expressionToggle">Expression per Note: OFF</button>
 
-// --- Pre-allocate messages ---
-const NOTE_ON = new Uint8Array([0x90,0,100]);
-const NOTE_OFF = new Uint8Array([0x80,0,0]);
+    <div id="controls">
+        <div class="slider-container">
+            <label for="cc1">Expression (CC11)</label>
+            <input type="range" id="cc1" min="0" max="127" value="64">
+        </div>
+        <div class="slider-container">
+            <label for="cc2">CC21</label>
+            <input type="range" id="cc2" min="0" max="127" value="64">
+        </div>
+        <div class="slider-container">
+            <label for="cc3">CC22</label>
+            <input type="range" id="cc3" min="0" max="127" value="64">
+        </div>
+        <div class="slider-container">
+            <label for="cc4">CC23</label>
+            <input type="range" id="cc4" min="0" max="127" value="64">
+        </div>
 
-// --- MIDI INIT ---
-navigator.requestMIDIAccess().then(midiAccess=>{
-  const outSelect = document.getElementById('midiOut');
-  for(const out of midiAccess.outputs.values()){
-    const opt = document.createElement('option'); opt.value=out.id; opt.textContent=out.name; outSelect.appendChild(opt);
-  }
-  const first = midiAccess.outputs.values().next().value;
-  if(first){ midiOutput=first; outSelect.value=first.id; }
-  outSelect.addEventListener('change',()=>{ midiOutput=midiAccess.outputs.get(outSelect.value); });
+        <div>
+            <label for="rootSelect">Key (Root)</label>
+            <select id="rootSelect">
+                <option>C</option>
+                <option>C#</option>
+                <option>D</option>
+                <option>D#</option>
+                <option>E</option>
+                <option>F</option>
+                <option>F#</option>
+                <option>G</option>
+                <option>G#</option>
+                <option>A</option>
+                <option>A#</option>
+                <option>B</option>
+            </select>
+            <br>
+            <label for="scaleSelect">Scale</label>
+            <select id="scaleSelect">
+                <option>major</option>
+                <option>minor</option>
+            </select>
+            <br>
+            <label for="octaveSelect">Octave</label>
+            <select id="octaveSelect">
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+            <br>
+            <label for="midiOut">MIDI Out</label>
+            <select id="midiOut"></select>
+        </div>
+    </div>
 
-  ['cc1','cc2','cc3','cc4'].forEach((id,i)=>{
-    document.getElementById(id).addEventListener('input', e=>{
-      if(!midiOutput) return;
-      midiOutput.send([0xB0,[11,21,22,23][i],parseInt(e.target.value)]);
-    });
-  });
+    <div id="piano"></div>
 
-  ['rootSelect','scaleSelect','octaveSelect'].forEach(id=>{
-    document.getElementById(id).addEventListener('change',()=>updateScaleLabels());
-  });
+    <script>
+        const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        const baseNote = 60;
+        const totalOctaves = 2;
+        let midiOutput = null;
+        let currentRoot = "C";
+        let currentScale = "major";
+        let currentOctave = 2;
+        let mouseDown = false;
+        let slideMode = false;
+        let activeSlideNote = null;
+        let expressionMode = false;
+        let lastKey = null;
+        let slideStartX = 0;
 
-  buildPiano(); updateScaleLabels();
-},()=>alert("Web MIDI not supported or permission denied"));
+        // Pre-allocate MIDI messages
+        const NOTE_ON_MSG = new Uint8Array([0x90, 60, 100]);
+        const NOTE_OFF_MSG = new Uint8Array([0x80, 60, 0]);
 
-// --- PIANO BUILD ---
-function buildPiano(){
-  const piano=document.getElementById('piano'); piano.innerHTML='';
-  for(let o=0;o<totalOctaves;o++){
-    for(let i=0;i<12;i++){
-      const midiNote=baseNote+o*12+i, noteName=noteNames[i]+(4+o);
-      const container=document.createElement('div'); container.classList.add('key-container');
-      if(i===0 && o>0) container.classList.add('octave-separator');
-      const degreeLabel=document.createElement('div'); degreeLabel.classList.add('degree'); container.appendChild(degreeLabel);
-      const key=document.createElement('div'); key.classList.add('key'); key.classList.add([1,3,6,8,10].includes(i)?'black':'white');
-      key.dataset.note=midiNote; key.dataset.name=noteNames[i]; key.textContent=noteName;
-      container.appendChild(key); piano.appendChild(container);
-    }
-  }
-}
+        navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
 
-// --- UTILS ---
-function getTransposedNote(note){ return note + noteNames.indexOf(currentRoot) + (currentOctave-2)*12; }
-function updateScaleLabels(){
-  const rootIndex=noteNames.indexOf(currentRoot);
-  const intervals=currentScale==="major"?[0,2,4,5,7,9,11]:[0,2,3,5,7,8,10];
-  const scaleNotes=intervals.map(i=>(rootIndex+i)%12); const degreeMap={}; scaleNotes.forEach((n,i)=>degreeMap[n]=i+1);
-  document.querySelectorAll('.key-container').forEach(container=>{
-    const key=container.querySelector('.key'); const label=container.querySelector('.degree');
-    const noteIndex=noteNames.indexOf(key.dataset.name); label.textContent=''; label.classList.remove('root');
-    if(noteIndex===rootIndex){ label.textContent="1"; label.classList.add('root'); }
-    else if(degreeMap[noteIndex]) label.textContent=degreeMap[noteIndex];
-  });
-}
+        function onMIDISuccess(midiAccess) {
+            const outputSelect = document.getElementById('midiOut');
+            for (const output of midiAccess.outputs.values()) {
+                const option = document.createElement('option');
+                option.value = output.id;
+                option.textContent = output.name;
+                outputSelect.appendChild(option);
+            }
+            outputSelect.addEventListener('change', () => { midiOutput = midiAccess.outputs.get(outputSelect.value); });
+            const first = midiAccess.outputs.values().next().value;
+            if (first) { midiOutput = first; outputSelect.value = first.id; }
 
-// --- EVENT HANDLERS ---
-document.getElementById('slideToggle').addEventListener('click',()=>{
-  slideMode=!slideMode; document.getElementById('slideToggle').textContent='Slide Mode: '+(slideMode?'ON':'OFF');
-  document.querySelectorAll('.key.active').forEach(k=>k.classList.remove('active'));
-  activeSlideNote=null; slideStartX=0; lastKey=null;
-  midiOutput?.send([0xE0,0,64]);
-});
-document.getElementById('expressionToggle').addEventListener('click',()=>{ expressionMode=!expressionMode; document.getElementById('expressionToggle').textContent='Expression per Note: '+(expressionMode?'ON':'OFF'); });
+            ['cc1', 'cc2', 'cc3', 'cc4'].forEach((id, i) => {
+                const slider = document.getElementById(id);
+                slider.addEventListener('input', () => {
+                    if (!midiOutput) return;
+                    const ccNum = [11, 21, 22, 23][i];
+                    midiOutput.send([0xB0, ccNum, parseInt(slider.value)]);
+                });
+            });
 
-// --- MULTITOUCH SUPPORT ---
-document.addEventListener('touchstart', handleTouchStart,{passive:false});
-document.addEventListener('touchmove', handleTouchMove,{passive:false});
-document.addEventListener('touchend', handleTouchEnd,{passive:false});
+            document.getElementById('rootSelect').addEventListener('change', e => {
+                currentRoot = e.target.value;
+                updateScaleLabels();
+            });
+            document.getElementById('scaleSelect').addEventListener('change', e => {
+                currentScale = e.target.value;
+                updateScaleLabels();
+            });
+            document.getElementById('octaveSelect').addEventListener('change', e => {
+                currentOctave = parseInt(e.target.value);
+            });
 
-function handleTouchStart(e){
-  e.preventDefault(); for(const t of e.changedTouches){ handleNoteOn(t.target,t.clientX,t.clientY); }
-}
-function handleTouchMove(e){
-  e.preventDefault(); for(const t of e.changedTouches){ handleNoteMove(t.target,t.clientX,t.clientY); }
-}
-function handleTouchEnd(e){
-  e.preventDefault(); for(const t of e.changedTouches){ handleNoteOff(t.target); }
-}
+            buildPiano();
+            updateScaleLabels();
+        }
 
-function handleNoteOn(target,x,y){
-  if(!target.classList.contains('key') || !midiOutput) return;
-  const midiNote=getTransposedNote(parseInt(target.dataset.note));
-  if(slideMode){ if(activeSlideNote!==null) return; activeSlideNote=parseInt(target.dataset.note); slideStartX=x; target.classList.add('active'); NOTE_ON[1]=getTransposedNote(activeSlideNote); midiOutput.send(NOTE_ON); }
-  else{ lastKey=target; NOTE_ON[1]=midiNote; if(expressionMode){ const rect=target.getBoundingClientRect(); const val=Math.max(0,Math.min(127,Math.round((rect.bottom-y)/rect.height*127))); midiOutput.send([0xB0,11,val]); } target.classList.add('active'); midiOutput.send(NOTE_ON); }
-}
+        function onMIDIFailure() { alert("Web MIDI not supported or permission denied."); }
 
-function handleNoteMove(target,x,y){
-  if(!midiOutput) return;
-  if(slideMode && activeSlideNote!==null){ updateSlidePitch(x); if(expressionMode){ const keyEl=document.querySelector('.key.active'); if(keyEl) updateExpression(keyEl,y); } }
-  else if(target?.classList.contains('key') && target!==lastKey){ if(lastKey) handleNoteOff(lastKey); handleNoteOn(target,x,y); lastKey=target; }
-  else if(lastKey && expressionMode) updateExpression(lastKey,y);
-}
+        document.getElementById('slideToggle').addEventListener('click', () => {
+            slideMode = !slideMode;
+            document.getElementById('slideToggle').textContent = 'Slide Mode: ' + (slideMode ? 'ON' : 'OFF');
+            document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
+            activeSlideNote = null;
+            slideStartX = 0;
+            lastKey = null;
+            midiOutput?.send([0xE0, 0, 64]); // reset pitch bend
+        });
 
-function handleNoteOff(target){
-  if(!target?.classList.contains('key') || !midiOutput) return;
-  const midiNote=getTransposedNote(parseInt(target.dataset.note));
-  target.classList.remove('active'); NOTE_OFF[1]=midiNote; midiOutput.send(NOTE_OFF);
-  if(slideMode && activeSlideNote!==null){ document.querySelectorAll('.key.active').forEach(k=>k.classList.remove('active')); midiOutput.send([0xE0,0,64]); activeSlideNote=null; slideStartX=0; }
-}
+        document.getElementById('expressionToggle').addEventListener('click', () => {
+            expressionMode = !expressionMode;
+            document.getElementById('expressionToggle').textContent = 'Expression per Note: ' + (expressionMode ? 'ON' : 'OFF');
+        });
 
-// --- SLIDE & EXPRESSION ---
-function updateExpression(keyEl,y){
-  if(!midiOutput) return; const rect=keyEl.getBoundingClientRect();
-  const val=Math.max(0,Math.min(127,Math.round((rect.bottom-y)/rect.height*127)));
-  midiOutput.send([0xB0,11,val]);
-}
+        function buildPiano() {
+            const piano = document.getElementById('piano');
+            piano.innerHTML = '';
+            for (let o = 0; o < totalOctaves; o++) {
+                for (let i = 0; i < 12; i++) {
+                    const noteName = noteNames[i] + (4 + o);
+                    const midiNote = baseNote + o * 12 + i;
+                    const container = document.createElement('div');
+                    container.classList.add('key-container');
+                    if (i === 0 && o > 0) container.classList.add('octave-separator');
+                    const degreeLabel = document.createElement('div');
+                    degreeLabel.classList.add('degree');
+                    container.appendChild(degreeLabel);
 
-function updateSlidePitch(clientX){
-  if(activeSlideNote===null) return;
-  const keys=Array.from(document.querySelectorAll('.key')).map(k=>({el:k,note:parseInt(k.dataset.note),rect:k.getBoundingClientRect()}));
-  const startC=keys.find(k=>k.note%12===0); const nextC=keys.find(k=>k.note%12===0 && k.note>startC.note);
-  if(!startC||!nextC) return;
-  const bend=Math.max(-8192,Math.min(8191,Math.round((clientX-slideStartX)/(nextC.rect.left-startC.rect.left)*8192)));
-  const val=bend+8192; midiOutput.send([0xE0,val&0x7F,(val>>7)&0x7F]);
-}
+                    const key = document.createElement('div');
+                    key.classList.add('key');
+                    key.classList.add(i === 1 || i === 3 || i === 6 || i === 8 || i === 10 ? 'black' : 'white');
+                    key.dataset.note = midiNote;
+                    key.dataset.name = noteNames[i];
+                    key.textContent = noteName;
 
-// --- MOUSE SUPPORT FOR DESKTOP ---
-document.addEventListener('mousedown',e=>{ mouseDown=true; handleNoteOn(e.target,e.clientX,e.clientY); });
-document.addEventListener('mousemove',e=>{ if(mouseDown) handleNoteMove(e.target,e.clientX,e.clientY); });
-document.addEventListener('mouseup',e=>{ mouseDown=false; handleNoteOff(lastKey); lastKey=null; });
-</script>
+                    container.appendChild(key);
+                    piano.appendChild(container);
+                }
+            }
+        }
+
+        function updateExpression(keyEl, clientY) {
+            if (!midiOutput) return;
+            const rect = keyEl.getBoundingClientRect();
+            let value = Math.round((rect.bottom - clientY) / rect.height * 127);
+            value = Math.max(0, Math.min(127, value));
+            midiOutput.send([0xB0, 11, value]); // CC11
+        }
+
+        // --- Note handling ---
+        function noteOn(e) {
+            if (!midiOutput) return;
+            const midiNote = getTransposedNote(parseInt(e.target.dataset.note));
+            let exprValue = 100;
+            if (expressionMode) {
+                const rect = e.target.getBoundingClientRect();
+                exprValue = Math.round((rect.bottom - e.clientY) / rect.height * 127);
+                exprValue = Math.max(0, Math.min(127, exprValue));
+                midiOutput.send([0xB0, 11, exprValue]);
+            }
+            e.target.classList.add('active');
+            midiOutput.send([0x90, midiNote, 100]);
+        }
+
+        function noteOff(e) {
+            if (!midiOutput) return;
+            const midiNote = getTransposedNote(parseInt(e.target.dataset.note));
+            e.target.classList.remove('active');
+            midiOutput.send([0x80, midiNote, 0]);
+        }
+
+        function getTransposedNote(midiNote) {
+            const rootOffset = noteNames.indexOf(currentRoot);
+            const octaveOffset = (currentOctave - 2) * 12;
+            return midiNote + rootOffset + octaveOffset;
+        }
+
+        function updateScaleLabels() {
+            const rootIndex = noteNames.indexOf(currentRoot);
+            const intervals = currentScale === "major" ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+            const scaleNotes = intervals.map(i => (rootIndex + i) % 12);
+            const degreeMap = {};
+            scaleNotes.forEach((n, i) => degreeMap[n] = i + 1);
+
+            document.querySelectorAll('.key-container').forEach(container => {
+                const key = container.querySelector('.key');
+                const label = container.querySelector('.degree');
+                const noteIndex = noteNames.indexOf(key.dataset.name);
+                label.textContent = ""; label.classList.remove('root');
+                if (noteIndex === rootIndex) { label.textContent = "1"; label.classList.add('root'); }
+                else if (degreeMap[noteIndex]) label.textContent = degreeMap[noteIndex];
+            });
+        }
+
+        // --- Slide mode and multitouch handlers ---
+        document.addEventListener('mousedown', e => {
+            if (!e.target.classList.contains('key')) return;
+            mouseDown = true;
+            if (slideMode) {
+                if (activeSlideNote !== null) return;
+                activeSlideNote = parseInt(e.target.dataset.note);
+                slideStartX = e.clientX;
+                e.target.classList.add('active');
+                midiOutput?.send([0x90, getTransposedNote(activeSlideNote), 100]);
+            } else {
+                noteOn({ target: e.target, clientY: e.clientY });
+                lastKey = e.target;
+            }
+        });
+
+        document.addEventListener('mousemove', e => {
+            if (!mouseDown) return;
+            if (slideMode && activeSlideNote !== null) {
+                updateSlidePitchMouse(e);
+                if (expressionMode) {
+                    const keyEl = document.querySelector(`.key.active`);
+                    if (keyEl) updateExpression(keyEl, e.clientY);
+                }
+            } else if (!slideMode && e.target?.classList.contains('key') && e.target !== lastKey) {
+                if (lastKey) noteOff({ target: lastKey });
+                noteOn({ target: e.target, clientY: e.clientY });
+                lastKey = e.target;
+            } else if (!slideMode && lastKey && expressionMode) {
+                updateExpression(lastKey, e.clientY);
+            }
+        });
+
+        document.addEventListener('mouseup', e => {
+            mouseDown = false;
+            if (!slideMode && lastKey) noteOff({ target: lastKey });
+            lastKey = null;
+
+            if (slideMode && activeSlideNote !== null) {
+                document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
+                midiOutput?.send([0x80, getTransposedNote(activeSlideNote), 0]);
+                midiOutput?.send([0xE0, 0, 64]);
+                activeSlideNote = null;
+                slideStartX = 0;
+            }
+        });
+
+        // --- Touch events for slide and multitouch ---
+        document.addEventListener('touchstart', e => {
+            e.preventDefault();
+            for (const touch of e.changedTouches) {
+                const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (!el || !el.classList.contains('key')) continue;
+
+                if (slideMode) {
+                    if (activeSlideNote !== null) continue;
+                    activeSlideNote = parseInt(el.dataset.note);
+                    slideStartX = touch.clientX;
+                    el.classList.add('active');
+                    midiOutput?.send([0x90, getTransposedNote(activeSlideNote), 100]);
+                } else {
+                    noteOn({ target: el, clientY: touch.clientY });
+                    lastKey = el;
+                }
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchmove', e => {
+            e.preventDefault();
+            for (const touch of e.changedTouches) {
+                const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (slideMode && activeSlideNote !== null) {
+                    updateSlidePitchTouch(touch);
+                    if (expressionMode && el) updateExpression(el, touch.clientY);
+                } else if (!slideMode && el && el !== lastKey && el.classList.contains('key')) {
+                    if (lastKey) noteOff({ target: lastKey });
+                    noteOn({ target: el, clientY: touch.clientY });
+                    lastKey = el;
+                } else if (!slideMode && lastKey && expressionMode) {
+                    updateExpression(lastKey, touch.clientY);
+                }
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchend', e => {
+            e.preventDefault();
+            for (const touch of e.changedTouches) {
+                if (!slideMode && lastKey) noteOff({ target: lastKey });
+                lastKey = null;
+
+                if (slideMode && activeSlideNote !== null) {
+                    document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
+                    midiOutput?.send([0x80, getTransposedNote(activeSlideNote), 0]);
+                    midiOutput?.send([0xE0, 0, 64]);
+                    activeSlideNote = null;
+                    slideStartX = 0;
+                }
+            }
+        }, { passive: false });
+
+        // --- Slide pitch bend ---
+        function updateSlidePitchMouse(e) {
+            if (!midiOutput || activeSlideNote === null) return;
+            const keys = Array.from(document.querySelectorAll('.key')).map(k => ({
+                note: parseInt(k.dataset.note),
+                rect: k.getBoundingClientRect()
+            }));
+            const startC = keys.find(k => k.note % 12 === 0);
+            const nextC = keys.find(k => k.note % 12 === 0 && k.note > startC.note);
+            if (!startC || !nextC) return;
+            const distance = e.clientX - slideStartX;
+            const octaveWidthPx = nextC.rect.left - startC.rect.left;
+            const bend = Math.max(-8192, Math.min(8191, Math.round((distance / octaveWidthPx) * 8192)));
+            const value = bend + 8192;
+            midiOutput.send([0xE0, value & 0x7F, (value >> 7) & 0x7F]);
+        }
+
+        function updateSlidePitchTouch(touch) {
+            if (!midiOutput || activeSlideNote === null) return;
+            const distance = touch.clientX - slideStartX;
+            const keys = Array.from(document.querySelectorAll('.key')).map(k => ({
+                note: parseInt(k.dataset.note),
+                rect: k.getBoundingClientRect()
+            }));
+            const startC = keys.find(k => k.note % 12 === 0);
+            const nextC = keys.find(k => k.note % 12 === 0 && k.note > startC.note);
+            if (!startC || !nextC) return;
+            const octaveWidthPx = nextC.rect.left - startC.rect.left;
+            const bend = Math.max(-8192, Math.min(8191, Math.round((distance / octaveWidthPx) * 8192)));
+            const value = bend + 8192;
+            midiOutput.send([0xE0, value & 0x7F, (value >> 7) & 0x7F]);
+        }
+    </script>
 </body>
+
 </html>
