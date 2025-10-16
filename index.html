@@ -1,413 +1,251 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Web MIDI Piano Roll with Slide & Expression</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebMIDI Direct</title>
     <style>
-        body {
-            background: white;
-            color: #111;
-            font-family: sans-serif;
-            text-align: center;
-            user-select: none;
-        }
-
-        #controls {
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            margin: 20px;
-            gap: 40px;
-        }
-
-        .slider-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .slider-container label {
-            margin-bottom: 10px;
-        }
-
-        input[type="range"] {
-            writing-mode: bt-lr;
-            -webkit-appearance: slider-vertical;
-            width: 8px;
-            height: 150px;
-            margin: 0 10px;
-        }
-
-        #piano {
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            height: 200px;
-            margin-top: 20px;
-            position: relative;
-        }
-
-        .key-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 40px;
-            position: relative;
-        }
-
-        .degree {
-            height: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            color: #00aaff;
-            margin-bottom: 2px;
-        }
-
-        .degree.root {
-            color: #ffcc00;
-        }
-
-        .key {
-            width: 40px;
-            height: 160px;
+        * {
             margin: 0;
-            border: 2px solid #ddd;
-            border-radius: 0;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            font-size: 12px;
-            color: #000;
+            padding: 0;
             box-sizing: border-box;
-            position: relative;
         }
-
-        .white {
-            background: #fff;
-            color: #000;
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            color: white;
         }
-
-        .black {
-            background: #444;
-            color: #fff;
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex: 1;
         }
-
-        .key.active {
-            background: #00ccff !important;
-            color: #000 !important;
-        }
-
-        .octave-separator::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: -2px;
-            bottom: -20px;
-            width: 3px;
-            background: black;
-            z-index: 10;
-        }
-
-        button {
+        
+        h1 {
+            text-align: center;
+            font-size: 24px;
             margin-bottom: 10px;
-            padding: 6px 12px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        
+        .status.error {
+            background: #dc2626;
+        }
+        
+        .status.ready {
+            background: #16a34a;
+        }
+        
+        .status.warning {
+            background: #f59e0b;
+        }
+        
+        select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #333;
+            border-radius: 10px;
             font-size: 16px;
+            background: #2a2a2a;
+            color: white;
+        }
+        
+        button {
+            width: 100%;
+            padding: 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.1s;
+            text-transform: uppercase;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        button:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+        
+        .midi-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            flex: 1;
+            justify-content: center;
+        }
+        
+        .note-on {
+            background: #22c55e;
+            color: white;
+            font-size: 32px;
+            padding: 60px 20px;
+        }
+        
+        .note-on:active:not(:disabled) {
+            background: #16a34a;
+            transform: scale(0.92);
+        }
+        
+        .note-off {
+            background: #ef4444;
+            color: white;
+            font-size: 32px;
+            padding: 60px 20px;
+        }
+        
+        .note-off:active:not(:disabled) {
+            background: #dc2626;
+            transform: scale(0.92);
+        }
+        
+        .note-on:disabled,
+        .note-off:disabled {
+            background: #4a4a4a;
+            cursor: not-allowed;
+            opacity: 0.5;
         }
     </style>
 </head>
-
 <body>
-    <h2>🎹 Web MIDI Piano Roll → Ableton</h2>
-
-    <button id="slideToggle">Slide Mode: OFF</button>
-    <button id="expressionToggle">Expression per Note: OFF</button>
-
-    <div id="controls">
-        <div class="slider-container">
-            <label for="cc1">Expression (CC11)</label>
-            <input type="range" id="cc1" min="0" max="127" value="64">
+    <div class="container">
+        <h1>🎹 WebMIDI Direct</h1>
+        
+        <div id="status" class="status warning">
+            Checking MIDI support...
         </div>
-        <div class="slider-container">
-            <label for="cc2">CC21</label>
-            <input type="range" id="cc2" min="0" max="127" value="64">
-        </div>
-        <div class="slider-container">
-            <label for="cc3">CC22</label>
-            <input type="range" id="cc3" min="0" max="127" value="64">
-        </div>
-        <div class="slider-container">
-            <label for="cc4">CC23</label>
-            <input type="range" id="cc4" min="0" max="127" value="64">
-        </div>
-
-        <div>
-            <label for="rootSelect">Key (Root)</label>
-            <select id="rootSelect">
-                <option>C</option>
-                <option>C#</option>
-                <option>D</option>
-                <option>D#</option>
-                <option>E</option>
-                <option>F</option>
-                <option>F#</option>
-                <option>G</option>
-                <option>G#</option>
-                <option>A</option>
-                <option>A#</option>
-                <option>B</option>
-            </select>
-            <br>
-            <label for="scaleSelect">Scale</label>
-            <select id="scaleSelect">
-                <option>major</option>
-                <option>minor</option>
-            </select>
-            <br>
-            <label for="octaveSelect">Octave</label>
-            <select id="octaveSelect">
-                <option value="0">0</option>
-                <option value="1">1</option>
-                <option value="2" selected>2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-            </select>
-            <br>
-            <label for="midiOut">MIDI Out</label>
-            <select id="midiOut"></select>
+        
+        <select id="midiOutput">
+            <option>Select MIDI Output...</option>
+        </select>
+        
+        <div class="midi-buttons">
+            <button class="note-on" id="noteOnBtn" disabled>
+                NOTE ON<br>C4
+            </button>
+            
+            <button class="note-off" id="noteOffBtn" disabled>
+                NOTE OFF<br>C4
+            </button>
         </div>
     </div>
 
-    <div id="piano"></div>
-
     <script>
-        const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-        const baseNote = 60;
-        const totalOctaves = 2;
-        let midiOutput = null;
-        let currentRoot = "C";
-        let currentScale = "major";
-        let currentOctave = 2;
-        let mouseDown = false;
-        let slideMode = false;
-        let activeSlideNote = null;
-        let expressionMode = false;
-        let lastKey = null;
-        let slideStartX = 0;
+        let midiAccess = null;
+        let selectedOutput = null;
+        
+        // Pre-create MIDI messages as typed arrays for maximum speed
+        const NOTE_ON_MSG = new Uint8Array([0x90, 60, 100]);  // Note On, C4, velocity 100
+        const NOTE_OFF_MSG = new Uint8Array([0x80, 60, 0]);    // Note Off, C4, velocity 0
+        
+        // Cache DOM elements
+        const statusDiv = document.getElementById('status');
+        const midiSelect = document.getElementById('midiOutput');
+        const noteOnBtn = document.getElementById('noteOnBtn');
+        const noteOffBtn = document.getElementById('noteOffBtn');
 
-        navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+        // Initialize WebMIDI
+        async function initMIDI() {
+            if (!navigator.requestMIDIAccess) {
+                updateStatus('WebMIDI not supported in this browser', 'error');
+                return;
+            }
 
-        function onMIDISuccess(midiAccess) {
-            const outputSelect = document.getElementById('midiOut');
-            for (const output of midiAccess.outputs.values()) {
+            try {
+                midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+                populateMIDIOutputs();
+                
+                // Listen for device changes
+                midiAccess.onstatechange = populateMIDIOutputs;
+                
+                updateStatus('Select a MIDI output', 'warning');
+            } catch (error) {
+                updateStatus('MIDI access denied: ' + error.message, 'error');
+            }
+        }
+
+        function populateMIDIOutputs() {
+            midiSelect.innerHTML = '<option>Select MIDI Output...</option>';
+            
+            const outputs = Array.from(midiAccess.outputs.values());
+            
+            if (outputs.length === 0) {
+                updateStatus('No MIDI outputs found', 'error');
+                return;
+            }
+
+            outputs.forEach(output => {
                 const option = document.createElement('option');
                 option.value = output.id;
                 option.textContent = output.name;
-                outputSelect.appendChild(option);
-            }
-            outputSelect.addEventListener('change', () => { midiOutput = midiAccess.outputs.get(outputSelect.value); });
-            const first = midiAccess.outputs.values().next().value;
-            if (first) { midiOutput = first; outputSelect.value = first.id; }
-
-            ['cc1', 'cc2', 'cc3', 'cc4'].forEach((id, i) => {
-                const slider = document.getElementById(id);
-                slider.addEventListener('input', () => {
-                    if (!midiOutput) return;
-                    const ccNum = [11, 21, 22, 23][i];
-                    midiOutput.send([0xB0, ccNum, parseInt(slider.value)]);
-                });
+                midiSelect.appendChild(option);
             });
-
-            document.getElementById('rootSelect').addEventListener('change', e => {
-                currentRoot = e.target.value;
-                updateScaleLabels();
-            });
-            document.getElementById('scaleSelect').addEventListener('change', e => {
-                currentScale = e.target.value;
-                updateScaleLabels();
-            });
-            document.getElementById('octaveSelect').addEventListener('change', e => {
-                currentOctave = parseInt(e.target.value);
-            });
-
-            buildPiano();
-            updateScaleLabels();
         }
 
-        function onMIDIFailure() { alert("Web MIDI not supported or permission denied."); }
-
-        document.getElementById('slideToggle').addEventListener('click', () => {
-            slideMode = !slideMode;
-            document.getElementById('slideToggle').textContent = 'Slide Mode: ' + (slideMode ? 'ON' : 'OFF');
-            document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
-            activeSlideNote = null;
-            slideStartX = 0;
-            lastKey = null;
-            midiOutput?.send([0xE0, 0, 64]); // reset pitch bend
-        });
-
-        document.getElementById('expressionToggle').addEventListener('click', () => {
-            expressionMode = !expressionMode;
-            document.getElementById('expressionToggle').textContent = 'Expression per Note: ' + (expressionMode ? 'ON' : 'OFF');
-        });
-
-        function buildPiano() {
-            const piano = document.getElementById('piano');
-            piano.innerHTML = '';
-            for (let o = 0; o < totalOctaves; o++) {
-                for (let i = 0; i < 12; i++) {
-                    const noteName = noteNames[i] + (4 + o);
-                    const midiNote = baseNote + o * 12 + i;
-                    const container = document.createElement('div');
-                    container.classList.add('key-container');
-                    if (i === 0 && o > 0) container.classList.add('octave-separator');
-                    const degreeLabel = document.createElement('div');
-                    degreeLabel.classList.add('degree');
-                    container.appendChild(degreeLabel);
-
-                    const key = document.createElement('div');
-                    key.classList.add('key');
-                    key.classList.add(i === 1 || i === 3 || i === 6 || i === 8 || i === 10 ? 'black' : 'white');
-                    key.dataset.note = midiNote;
-                    key.dataset.name = noteNames[i];
-                    key.textContent = noteName;
-
-                    container.appendChild(key);
-                    piano.appendChild(container);
-                }
-            }
-        }
-
-        // --- Vertical Expression ---
-        function updateExpression(keyEl, clientY) {
-            if (!midiOutput) return;
-            const rect = keyEl.getBoundingClientRect();
-            let value = Math.round((rect.bottom - clientY) / rect.height * 127);
-            value = Math.max(0, Math.min(127, value));
-            midiOutput.send([0xB0, 11, value]); // CC11
-        }
-
-        // --- Note / Slide Handling ---
-        document.addEventListener('mousedown', e => {
-            if (!e.target.classList.contains('key')) return;
-            mouseDown = true;
-
-            if (slideMode) {
-                if (activeSlideNote !== null) return;
-                activeSlideNote = parseInt(e.target.dataset.note);
-                slideStartX = e.clientX;
-                e.target.classList.add('active');
-                midiOutput?.send([0x90, getTransposedNote(activeSlideNote), 100]);
+        midiSelect.addEventListener('change', (e) => {
+            const outputId = e.target.value;
+            selectedOutput = midiAccess.outputs.get(outputId);
+            
+            if (selectedOutput) {
+                noteOnBtn.disabled = false;
+                noteOffBtn.disabled = false;
+                updateStatus('Ready! Tap buttons to send MIDI', 'ready');
             } else {
-                noteOn({ target: e.target });
-                lastKey = e.target;
+                noteOnBtn.disabled = true;
+                noteOffBtn.disabled = true;
+                updateStatus('Select a MIDI output', 'warning');
             }
         });
 
-        document.addEventListener('mousemove', e => {
-            if (!mouseDown) return;
-
-            if (slideMode && activeSlideNote !== null) {
-                updateSlidePitch(e);
-                if (expressionMode) {
-                    const keyEl = document.querySelector(`.key.active`);
-                    if (keyEl) updateExpression(keyEl, e.clientY);
-                }
-            } else if (!slideMode && e.target?.classList.contains('key') && e.target !== lastKey) {
-                if (lastKey) noteOff({ target: lastKey });
-                noteOn({ target: e.target });
-                lastKey = e.target;
-            } else if (!slideMode && lastKey && expressionMode) {
-                updateExpression(lastKey, e.clientY);
-            }
-        });
-
-        document.addEventListener('mouseup', e => {
-            mouseDown = false;
-            if (!slideMode && lastKey) noteOff({ target: lastKey });
-            lastKey = null;
-            if (slideMode && activeSlideNote !== null) {
-                document.querySelectorAll('.key.active').forEach(k => k.classList.remove('active'));
-                midiOutput?.send([0x80, getTransposedNote(activeSlideNote), 0]);
-                midiOutput?.send([0xE0, 0, 64]);
-                activeSlideNote = null;
-                slideStartX = 0;
-            }
-        });
-
-        // --- Continuous Pitch Bend ---
-        function updateSlidePitch(e) {
-            if (!midiOutput || activeSlideNote === null) return;
-
-            const distance = e.clientX - slideStartX;
-
-            const keys = Array.from(document.querySelectorAll('.key')).map(k => ({
-                el: k,
-                note: parseInt(k.dataset.note),
-                rect: k.getBoundingClientRect()
-            }));
-
-            const startC = keys.find(k => k.note % 12 === 0);
-            const nextC = keys.find(k => k.note % 12 === 0 && k.note > startC.note);
-
-            if (!startC || !nextC) return;
-
-            const octaveWidthPx = nextC.rect.left - startC.rect.left;
-
-            const bend = Math.max(-8192, Math.min(8191, Math.round((distance / octaveWidthPx) * 8192)));
-            const value = bend + 8192;
-            midiOutput.send([0xE0, value & 0x7F, (value >> 7) & 0x7F]);
+        // Ultra-fast MIDI send functions - inline for speed
+        function sendNoteOn() {
+            selectedOutput && selectedOutput.send(NOTE_ON_MSG);
         }
 
-        function getTransposedNote(midiNote) {
-            const rootOffset = noteNames.indexOf(currentRoot);
-            const octaveOffset = (currentOctave - 2) * 12;
-            return midiNote + rootOffset + octaveOffset;
+        function sendNoteOff() {
+            selectedOutput && selectedOutput.send(NOTE_OFF_MSG);
         }
 
-        function noteOn(e) {
-                if (!midiOutput) return;
-                const midiNote = getTransposedNote(parseInt(e.target.dataset.note));
-
-                // Calculate expression first
-                let exprValue = 100; // default velocity
-                if (expressionMode) {
-                    const rect = e.target.getBoundingClientRect();
-                    exprValue = Math.round((rect.bottom - e.clientY) / rect.height * 127);
-                    exprValue = Math.max(0, Math.min(127, exprValue));
-                    midiOutput.send([0xB0, 11, exprValue]); // CC11
-                }
-
-                e.target.classList.add('active');
-                midiOutput.send([0x90, midiNote, 100]); // send note
-            }
-
-
-        function noteOff(e) {
-            if (!midiOutput) return;
-            const midiNote = getTransposedNote(parseInt(e.target.dataset.note));
-            e.target.classList.remove('active');
-            midiOutput.send([0x80, midiNote, 0]);
+        function updateStatus(text, type) {
+            statusDiv.textContent = text;
+            statusDiv.className = 'status ' + type;
         }
 
-        function updateScaleLabels() {
-            const rootIndex = noteNames.indexOf(currentRoot);
-            const intervals = currentScale === "major" ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
-            const scaleNotes = intervals.map(i => (rootIndex + i) % 12);
-            const degreeMap = {};
-            scaleNotes.forEach((n, i) => degreeMap[n] = i + 1);
+        // Touch events for instant response (bypasses 300ms click delay)
+        noteOnBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            sendNoteOn();
+        }, { passive: false });
 
-            document.querySelectorAll('.key-container').forEach(container => {
-                const key = container.querySelector('.key');
-                const label = container.querySelector('.degree');
-                const noteIndex = noteNames.indexOf(key.dataset.name);
-                label.textContent = ""; label.classList.remove('root');
-                if (noteIndex === rootIndex) { label.textContent = "1"; label.classList.add('root'); }
-                else if (degreeMap[noteIndex]) label.textContent = degreeMap[noteIndex];
-            });
-        }
+        noteOffBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            sendNoteOff();
+        }, { passive: false });
+
+        // Fallback click handlers for desktop
+        noteOnBtn.addEventListener('click', sendNoteOn);
+        noteOffBtn.addEventListener('click', sendNoteOff);
+
+        // Initialize on load
+        initMIDI();
     </script>
 </body>
-
 </html>
