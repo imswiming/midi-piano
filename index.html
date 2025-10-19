@@ -1,151 +1,170 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>2x4 MIDI Pad (C4) with Octave Control</title>
-<style>
-  body {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    height: 100vh;
-    background: #111;
-    color: #fff;
-    font-family: sans-serif;
-    gap: 30px;
-    margin: 0;
-    padding: 20px;
-  }
-  .container {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 30px;
-  }
-  .pad-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 120px);
-    grid-template-rows: repeat(4, 120px);
-    gap: 15px;
-  }
-  .pad {
-    background: #444;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.3em;
-    touch-action: manipulation;
-    user-select: none;
-    transition: background 0.1s;
-  }
-  .pad.active {
-    background: #0f0;
-  }
-  .controls {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 10px;
-  }
-  select, button {
-    font-size: 1em;
-    padding: 5px 10px;
-    border-radius: 6px;
-    border: none;
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>2x8 MIDI Pad — Start C4 (loopMIDI friendly)</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#60a5fa;--muted:#9ca3af}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6eef8;background:linear-gradient(180deg,#071024 0%, #081229 100%);display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px}
+    .app{width:820px;max-width:100%;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));border-radius:12px;padding:18px;box-shadow:0 8px 30px rgba(2,6,23,.6)}
+    h1{font-size:18px;margin:0 0 8px}
+    .controls{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+    select,input[type=range]{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px}
+    .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
+    .pad{background:linear-gradient(180deg,#0b2238,#05263a);border-radius:8px;height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;cursor:pointer;box-shadow:0 4px 14px rgba(2,6,23,.6);transition:transform .08s, box-shadow .08s}
+    .pad:active,.pad.down{transform:translateY(2px) scale(.995);box-shadow:0 2px 6px rgba(2,6,23,.5)}
+    .note{font-weight:600;color:#e6f0ff}
+    .num{font-size:12px;color:var(--muted);margin-top:6px}
+    .row-label{margin:8px 0 6px;color:var(--muted);font-size:13px}
+    .bottom-row{display:flex;gap:10px;margin-top:12px;align-items:center}
+    button{padding:8px 10px;border-radius:8px;border:none;background:var(--accent);color:#042033;cursor:pointer}
+    .hint{font-size:12px;color:var(--muted)}
+    @media (max-width:720px){.pad{height:72px}.app{padding:12px}}
+  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="pad-grid" id="padGrid"></div>
+  <div class="app">
+    <h1>2 × 8 MIDI Pad — starting at C4 (MIDI note 60)</h1>
     <div class="controls">
-      <label for="octave">Octave:</label>
-      <select id="octave">
-        <option value="-2">-2</option>
-        <option value="-1">-1</option>
-        <option value="0" selected>0</option>
-        <option value="1">+1</option>
-        <option value="2">+2</option>
-      </select>
-      <label for="midiOutput">MIDI Output:</label>
-      <select id="midiOutput"></select>
+      <label>
+        MIDI Output:
+        <select id="midiOut"></select>
+      </label>
+      <label class="hint">Velocity <span id="velVal">100</span>
+        <input id="velocity" type="range" min="1" max="127" value="100">
+      </label>
+      <label class="hint">Hold (toggle)
+        <input id="hold" type="checkbox" style="margin-left:6px">
+      </label>
+      <label class="hint">Octave <span id="octVal">0</span>
+        <input id="octave" type="range" min="-2" max="2" value="0" step="1">
+      </label>
+      <button id="allOff">All Notes Off</button>
+      <div style="flex:1"></div>
+      <div class="hint">Tip: create a virtual MIDI port in loopMIDI, then select it here.</div>
+    </div>
+
+    <div class="row-label">Row 1 (left → right)</div>
+    <div id="gridTop" class="grid"></div>
+    <div class="row-label">Row 2 (left → right)</div>
+    <div id="gridBottom" class="grid"></div>
+
+    <div class="bottom-row">
+      <div class="hint">Start note: <strong id="startNoteLabel">C4</strong> (MIDI 60). Pads map to semitones upward across the 16 pads.</div>
+      <div style="flex:1"></div>
+      <button id="downloadHtml">Download HTML</button>
     </div>
   </div>
 
-<script>
-let midi = null;
-let output = null;
-let baseNote = 60; // C4
-let octaveShift = 0;
+  <script>
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    function noteName(n){
+      const octave = Math.floor(n/12) - 1;
+      const name = NOTE_NAMES[n % 12];
+      return name + octave;
+    }
 
-const pads = [];
+    let START_NOTE = 60;
+    const gridTop = document.getElementById('gridTop');
+    const gridBottom = document.getElementById('gridBottom');
+    const pads = [];
 
-for (let i = 0; i < 8; i++) {
-  pads.push({ note: baseNote + i, label: `C${Math.floor((baseNote + i) / 12)}` });
-}
+    function createPads(){
+      gridTop.innerHTML = ''; gridBottom.innerHTML = ''; pads.length = 0;
+      for(let r=0;r<2;r++){
+        for(let c=0;c<8;c++){
+          const idx = r*8 + c;
+          const midi = START_NOTE + idx;
+          const el = document.createElement('div');
+          el.className = 'pad';
+          el.dataset.note = midi;
+          el.innerHTML = `<div class="note">${noteName(midi)}</div><div class="num">MIDI ${midi}</div>`;
+          let held = false;
+          const sendOn = () => sendNoteOn(midi);
+          const sendOff = () => sendNoteOff(midi);
+          el.addEventListener('mousedown', e=>{ el.classList.add('down'); held=true; sendOn(); });
+          document.addEventListener('mouseup', e=>{ if(held && !document.getElementById('hold').checked){ el.classList.remove('down'); sendOff(); held=false;} });
+          el.addEventListener('touchstart', e=>{ e.preventDefault(); el.classList.add('down'); held=true; sendOn(); });
+          el.addEventListener('touchend', e=>{ e.preventDefault(); if(held && !document.getElementById('hold').checked){ el.classList.remove('down'); sendOff(); held=false;} });
+          el.addEventListener('click', e=>{
+            if(document.getElementById('hold').checked){
+              if(el.classList.contains('down')){ el.classList.remove('down'); sendOff(); }
+              else{ el.classList.add('down'); sendOn(); }
+            }
+          });
+          (r===0?gridTop:gridBottom).appendChild(el);
+          pads.push(el);
+        }
+      }
+    }
 
-const padGrid = document.getElementById('padGrid');
+    createPads();
 
-pads.forEach((pad, i) => {
-  const el = document.createElement('div');
-  el.className = 'pad';
-  el.textContent = `Pad ${i + 1}`;
+    let midiAccess = null;
+    let selectedOutput = null;
 
-  const noteOn = () => {
-    el.classList.add('active');
-    sendMIDI(0x90, pad.note + octaveShift * 12, 100);
-  };
-  const noteOff = () => {
-    el.classList.remove('active');
-    sendMIDI(0x80, pad.note + octaveShift * 12, 0);
-  };
+    function populateOutputs(){
+      const sel = document.getElementById('midiOut');
+      sel.innerHTML = '';
+      if(!midiAccess) return;
+      const outs = Array.from(midiAccess.outputs.values());
+      outs.forEach(o=>{
+        const opt = document.createElement('option');
+        opt.value = o.id;
+        opt.textContent = o.name + (o.manufacturer ? ' — ' + o.manufacturer : '');
+        sel.appendChild(opt);
+      });
+      if(outs.length>0){ sel.value = outs[0].id; selectedOutput = outs[0]; }
+    }
 
-  el.addEventListener('touchstart', e => { e.preventDefault(); noteOn(); });
-  el.addEventListener('touchend', e => { e.preventDefault(); noteOff(); });
-  el.addEventListener('mousedown', noteOn);
-  el.addEventListener('mouseup', noteOff);
-  el.addEventListener('mouseleave', noteOff);
+    function onMIDISuccess(m){ midiAccess = m; populateOutputs(); m.onstatechange = ()=>populateOutputs(); }
+    function onMIDIFailure(err){ alert('Web MIDI API not available or permission denied.'); }
+    if(navigator.requestMIDIAccess){ navigator.requestMIDIAccess({sysex:false}).then(onMIDISuccess,onMIDIFailure); }
 
-  padGrid.appendChild(el);
-});
+    document.getElementById('midiOut').addEventListener('change', e=>{ const id = e.target.value; selectedOutput = midiAccess.outputs.get(id); });
 
-async function initMIDI() {
-  if (navigator.requestMIDIAccess) {
-    midi = await navigator.requestMIDIAccess();
-    updateOutputs();
-  } else {
-    alert('WebMIDI not supported');
-  }
-}
+    function send(msg){ if(!selectedOutput){ if(midiAccess && midiAccess.outputs.size>0){ selectedOutput = Array.from(midiAccess.outputs.values())[0]; document.getElementById('midiOut').value = selectedOutput.id; } else return; } try{ selectedOutput.send(msg); }catch(e){ console.error('MIDI send error',e); } }
+    function sendNoteOn(note){ const vel = parseInt(document.getElementById('velocity').value||100); send([0x90, note & 0x7f, vel & 0x7f]); }
+    function sendNoteOff(note){ send([0x80, note & 0x7f, 0x40]); }
 
-function updateOutputs() {
-  const outputSelect = document.getElementById('midiOutput');
-  outputSelect.innerHTML = '';
-  midi.outputs.forEach(port => {
-    const opt = document.createElement('option');
-    opt.value = port.id;
-    opt.textContent = port.name;
-    outputSelect.appendChild(opt);
-  });
-  output = midi.outputs.values().next().value;
-}
+    document.getElementById('allOff').addEventListener('click', ()=>{ if(!midiAccess) return; midiAccess.outputs.forEach(o=>{ try{ o.send([0xB0, 0x7B, 0x00]); }catch(e){} }); pads.forEach(p=>p.classList.remove('down')); });
 
-function sendMIDI(cmd, note, velocity) {
-  if (output) output.send([cmd, note, velocity]);
-}
+    document.getElementById('velocity').addEventListener('input', e=>{ document.getElementById('velVal').textContent = e.target.value; });
 
-document.getElementById('midiOutput').addEventListener('change', e => {
-  const id = e.target.value;
-  output = midi.outputs.get(id);
-});
+    document.getElementById('octave').addEventListener('input', e=>{
+      const shift = parseInt(e.target.value);
+      document.getElementById('octVal').textContent = shift;
+      START_NOTE = 60 + shift*12;
+      document.getElementById('startNoteLabel').textContent = noteName(START_NOTE);
+      createPads();
+    });
 
-document.getElementById('octave').addEventListener('change', e => {
-  octaveShift = parseInt(e.target.value);
-});
+    document.getElementById('downloadHtml').addEventListener('click', ()=>{
+      const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'midi-pad-2x8-c4.html';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
 
-initMIDI();
-</script>
+    const keyMap = ['1','2','3','4','5','6','7','8','q','w','e','r','t','y','u','i'];
+    const keyToIdx = {}; keyMap.forEach((k,i)=>keyToIdx[k]=i);
+    const activeKeys = new Set();
+    window.addEventListener('keydown', e=>{
+      const k = e.key.toLowerCase();
+      if(keyToIdx[k]!==undefined && !activeKeys.has(k)){
+        activeKeys.add(k);
+        const idx = keyToIdx[k]; const el = pads[idx]; el.classList.add('down'); sendNoteOn(Number(el.dataset.note));
+      }
+    });
+    window.addEventListener('keyup', e=>{
+      const k = e.key.toLowerCase();
+      if(keyToIdx[k]!==undefined){
+        activeKeys.delete(k);
+        const idx = keyToIdx[k]; const el = pads[idx]; if(!document.getElementById('hold').checked){ el.classList.remove('down'); sendNoteOff(Number(el.dataset.note)); }
+      }
+    });
+  </script>
 </body>
 </html>
