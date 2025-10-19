@@ -1,251 +1,169 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebMIDI Direct</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-            background: #1a1a1a;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            color: white;
-        }
-        
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            flex: 1;
-        }
-        
-        h1 {
-            text-align: center;
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        
-        .status {
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 18px;
-        }
-        
-        .status.error {
-            background: #dc2626;
-        }
-        
-        .status.ready {
-            background: #16a34a;
-        }
-        
-        .status.warning {
-            background: #f59e0b;
-        }
-        
-        select {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #333;
-            border-radius: 10px;
-            font-size: 16px;
-            background: #2a2a2a;
-            color: white;
-        }
-        
-        button {
-            width: 100%;
-            padding: 20px;
-            border: none;
-            border-radius: 10px;
-            font-size: 20px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 0.1s;
-            text-transform: uppercase;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-        
-        button:active:not(:disabled) {
-            transform: scale(0.95);
-        }
-        
-        .midi-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            flex: 1;
-            justify-content: center;
-        }
-        
-        .note-on {
-            background: #22c55e;
-            color: white;
-            font-size: 32px;
-            padding: 60px 20px;
-        }
-        
-        .note-on:active:not(:disabled) {
-            background: #16a34a;
-            transform: scale(0.92);
-        }
-        
-        .note-off {
-            background: #ef4444;
-            color: white;
-            font-size: 32px;
-            padding: 60px 20px;
-        }
-        
-        .note-off:active:not(:disabled) {
-            background: #dc2626;
-            transform: scale(0.92);
-        }
-        
-        .note-on:disabled,
-        .note-off:disabled {
-            background: #4a4a4a;
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>2x4 MIDI Pad (C4) — Optimized</title>
+<style>
+  :root{--bg:#071022;--panel:#0b1220;--accent:#60a5fa;--muted:#9ca3af}
+  html,body{height:100%;margin:0;background:var(--bg);color:#e6eef8;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  .container{display:flex;align-items:flex-start;justify-content:center;height:100%;padding:28px;box-sizing:border-box}
+  .pad-grid{display:grid;grid-template-columns:repeat(2,140px);grid-template-rows:repeat(4,100px);gap:14px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .pad{background:#081827;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;cursor:pointer;-webkit-user-select:none;transition:transform .06s;box-shadow:0 6px 18px rgba(2,6,23,.6)}
+  .pad:active,.pad.active{transform:translateY(2px);box-shadow:0 3px 8px rgba(2,6,23,.5)}
+  .pad .note{font-weight:700;font-size:18px}
+  .pad .midi{font-size:12px;color:var(--muted);margin-top:6px}
+  .controls{display:flex;flex-direction:column;gap:10px;margin-left:28px;min-width:220px}
+  select,input[type=range],button{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px;color:var(--accent)}
+  label{font-size:13px;color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted)}
+  button{background:var(--accent);color:#042033;border:none}
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎹 WebMIDI Direct</h1>
-        
-        <div id="status" class="status warning">
-            Checking MIDI support...
-        </div>
-        
-        <select id="midiOutput">
-            <option>Select MIDI Output...</option>
-        </select>
-        
-        <div class="midi-buttons">
-            <button class="note-on" id="noteOnBtn" disabled>
-                NOTE ON<br>C4
-            </button>
-            
-            <button class="note-off" id="noteOffBtn" disabled>
-                NOTE OFF<br>C4
-            </button>
-        </div>
+  <div class="container">
+    <div class="pad-grid" id="padGrid"></div>
+
+    <div class="controls" id="controls">
+      <label class="hint">Octave shift (semitones: ±12)</label>
+      <input id="octave" type="range" min="-2" max="2" value="0" step="1">
+      <div class="hint">Current shift: <span id="octVal">0</span></div>
+
+      <label class="hint">Velocity</label>
+      <input id="velocity" type="range" min="1" max="127" value="100">
+      <div class="hint">Velocity: <span id="velVal">100</span></div>
+
+      <label class="hint">MIDI Output</label>
+      <select id="midiOutput"></select>
+
+      <button id="allOff">All Notes Off</button>
+      <div class="hint">Tip: use loopMIDI to create/select a virtual port. Touchscreens: use touchstart for near-zero latency.</div>
     </div>
+  </div>
 
-    <script>
-        let midiAccess = null;
-        let selectedOutput = null;
-        
-        // Pre-create MIDI messages as typed arrays for maximum speed
-        const NOTE_ON_MSG = new Uint8Array([0x90, 60, 100]);  // Note On, C4, velocity 100
-        const NOTE_OFF_MSG = new Uint8Array([0x80, 60, 0]);    // Note Off, C4, velocity 0
-        
-        // Cache DOM elements
-        const statusDiv = document.getElementById('status');
-        const midiSelect = document.getElementById('midiOutput');
-        const noteOnBtn = document.getElementById('noteOnBtn');
-        const noteOffBtn = document.getElementById('noteOffBtn');
+<script>
+/* ==========================
+   Optimized 2x4 MIDI Pad
+   - preallocated messages
+   - cached DOM refs
+   - touchstart with passive:false + preventDefault
+   - typed arrays
+   - minimal hot-path work
+   ==========================*/
 
-        // Initialize WebMIDI
-        async function initMIDI() {
-            if (!navigator.requestMIDIAccess) {
-                updateStatus('WebMIDI not supported in this browser', 'error');
-                return;
-            }
+// --- constants & helpers ---
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const BASE_START = 60; // C4
+const PAD_COUNT = 8;
 
-            try {
-                midiAccess = await navigator.requestMIDIAccess({ sysex: false });
-                populateMIDIOutputs();
-                
-                // Listen for device changes
-                midiAccess.onstatechange = populateMIDIOutputs;
-                
-                updateStatus('Select a MIDI output', 'warning');
-            } catch (error) {
-                updateStatus('MIDI access denied: ' + error.message, 'error');
-            }
-        }
+function noteName(n){ return NOTE_NAMES[n % 12] + (Math.floor(n/12)-1); }
 
-        function populateMIDIOutputs() {
-            midiSelect.innerHTML = '<option>Select MIDI Output...</option>';
-            
-            const outputs = Array.from(midiAccess.outputs.values());
-            
-            if (outputs.length === 0) {
-                updateStatus('No MIDI outputs found', 'error');
-                return;
-            }
+// --- cached DOM elements ---
+const padGrid = document.getElementById('padGrid');
+const octaveEl = document.getElementById('octave');
+const octVal = document.getElementById('octVal');
+const velocityEl = document.getElementById('velocity');
+const velVal = document.getElementById('velVal');
+const midiSelect = document.getElementById('midiOutput');
+const allOffBtn = document.getElementById('allOff');
 
-            outputs.forEach(output => {
-                const option = document.createElement('option');
-                option.value = output.id;
-                option.textContent = output.name;
-                midiSelect.appendChild(option);
-            });
-        }
+// --- MIDI state (cached for direct access) ---
+let midiAccess = null;
+let selectedOutput = null;
+let octaveShift = 0; // in octaves (±2)
 
-        midiSelect.addEventListener('change', (e) => {
-            const outputId = e.target.value;
-            selectedOutput = midiAccess.outputs.get(outputId);
-            
-            if (selectedOutput) {
-                noteOnBtn.disabled = false;
-                noteOffBtn.disabled = false;
-                updateStatus('Ready! Tap buttons to send MIDI', 'ready');
-            } else {
-                noteOnBtn.disabled = true;
-                noteOffBtn.disabled = true;
-                updateStatus('Select a MIDI output', 'warning');
-            }
-        });
+// Preallocated message buffers for each pad (we'll update note byte on octave change)
+const padOnMsgs = new Array(PAD_COUNT);
+const padOffMsgs = new Array(PAD_COUNT);
 
-        // Ultra-fast MIDI send functions - inline for speed
-        function sendNoteOn() {
-            selectedOutput && selectedOutput.send(NOTE_ON_MSG);
-        }
+// Hold references to pad elements for instant access
+const padEls = new Array(PAD_COUNT);
 
-        function sendNoteOff() {
-            selectedOutput && selectedOutput.send(NOTE_OFF_MSG);
-        }
+// --- build pads (runs once) ---
+(function buildPads(){
+  for(let i=0;i<PAD_COUNT;i++){
+    const el = document.createElement('div');
+    el.className = 'pad';
+    const midi = BASE_START + i; // initial
+    el.innerHTML = `<div class="note">${noteName(midi)}</div><div class="midi">MIDI ${midi}</div>`;
+    padGrid.appendChild(el);
+    padEls[i] = el;
+    // create typed arrays filled with placeholder note; we'll set note byte later
+    padOnMsgs[i] = new Uint8Array([0x90, midi & 0x7f, Number(velocityEl.value) & 0x7f]);
+    padOffMsgs[i] = new Uint8Array([0x80, midi & 0x7f, 0x00]);
 
-        function updateStatus(text, type) {
-            statusDiv.textContent = text;
-            statusDiv.className = 'status ' + type;
-        }
+    // HOT-PATH: minimal inline handlers. Use touchstart (passive:false) + click fallback
+    el.addEventListener('touchstart', (e)=>{ e.preventDefault(); el.classList.add('active'); selectedOutput && selectedOutput.send(padOnMsgs[i]); }, {passive:false});
+    el.addEventListener('touchend',   (e)=>{ e.preventDefault(); el.classList.remove('active'); selectedOutput && selectedOutput.send(padOffMsgs[i]); }, {passive:false});
+    // mouse
+    el.addEventListener('mousedown',  ()=>{ el.classList.add('active'); selectedOutput && selectedOutput.send(padOnMsgs[i]); });
+    el.addEventListener('mouseup',    ()=>{ el.classList.remove('active'); selectedOutput && selectedOutput.send(padOffMsgs[i]); });
+    el.addEventListener('mouseleave', ()=>{ el.classList.remove('active'); selectedOutput && selectedOutput.send(padOffMsgs[i]); });
+  }
+})();
 
-        // Touch events for instant response (bypasses 300ms click delay)
-        noteOnBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            sendNoteOn();
-        }, { passive: false });
+// --- update messages when octave or velocity changes ---
+function updatePadMessages(){
+  const vel = Number(velocityEl.value) & 0x7f;
+  const shift = Number(octaveEl.value) * 12; // semitone shift
+  octaveShift = Number(octaveEl.value);
+  octVal.textContent = octaveShift;
+  velVal.textContent = vel;
 
-        noteOffBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            sendNoteOff();
-        }, { passive: false });
+  for(let i=0;i<PAD_COUNT;i++){
+    const midi = (BASE_START + i + shift) & 0x7f;
+    // update DOM note label fast (direct child nodes)
+    const el = padEls[i];
+    const noteDiv = el.firstElementChild; // .note
+    const midiDiv = noteDiv.nextElementSibling; // .midi
+    noteDiv.textContent = noteName(midi);
+    midiDiv.textContent = 'MIDI ' + midi;
 
-        // Fallback click handlers for desktop
-        noteOnBtn.addEventListener('click', sendNoteOn);
-        noteOffBtn.addEventListener('click', sendNoteOff);
+    // reuse typed arrays, only update the note byte
+    padOnMsgs[i][1] = midi;
+    padOnMsgs[i][2] = vel;
+    padOffMsgs[i][1] = midi;
+  }
+}
 
-        // Initialize on load
-        initMIDI();
-    </script>
+// --- MIDI init & populate (cached operations) ---
+async function initMIDI(){
+  if(!navigator.requestMIDIAccess){ return; }
+  try{
+    midiAccess = await navigator.requestMIDIAccess({sysex:false});
+    midiAccess.onstatechange = populateOutputs; // refresh when devices change
+    populateOutputs();
+  }catch(e){ /* ignore */ }
+}
+
+function populateOutputs(){
+  // minimal DOM work in one shot
+  midiSelect.innerHTML = '';
+  const outs = Array.from(midiAccess.outputs.values());
+  for(const o of outs){
+    const opt = document.createElement('option'); opt.value = o.id; opt.textContent = o.name || (o.manufacturer || 'MIDI Output'); midiSelect.appendChild(opt);
+  }
+  // auto-select first
+  if(outs.length) { selectedOutput = outs[0]; midiSelect.value = selectedOutput.id; }
+}
+
+midiSelect.addEventListener('change', ()=>{ selectedOutput = midiAccess.outputs.get(midiSelect.value); });
+
+// All Notes Off (send to all outputs quickly)
+allOffBtn.addEventListener('click', ()=>{
+  if(!midiAccess) return;
+  midiAccess.outputs.forEach(o=>{ try{ o.send([0xB0,0x7B,0x00]); }catch(e){} });
+  padEls.forEach(p=>p.classList.remove('active'));
+});
+
+// update on controls
+octaveEl.addEventListener('input', ()=>{ updatePadMessages(); });
+velocityEl.addEventListener('input', ()=>{ updatePadMessages(); });
+
+// initial update
+updatePadMessages();
+initMIDI();
+
+</script>
 </body>
 </html>
